@@ -2,7 +2,7 @@
 *.avi
 *.mp4
 docs/tiny2c/images/*/*.png
-docs/tiny2c/images/*.jpg
+docs/tiny2c/images/*/*.jpg
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

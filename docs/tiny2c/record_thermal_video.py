@@ -6,55 +6,87 @@ import time
 from datetime import datetime
 
 # ================== CONFIG ==================
-VIDEO_DEVICE = "/dev/video2" 	# AW m15-Ubuntu20.04: /dev/video2
-FRAME_WIDTH = 256
-FRAME_HEIGHT = 194
-FPS = 30
+VIDEO_DEVICE = "/dev/video2"
 
-CLIP_DURATION_MINUTES = 1      # in minutes
+FRAME_WIDTH  = 256
+FRAME_HEIGHT = 194
+
+TARGET_FPS = 30                  # desired fps in file
+CLIP_DURATION_MINUTES = 1        # exact clip length
+
 SAVE_DIR = "clips/thermal_tiny2c"
+USE_MP4 = True                   # <-- MP4 ON by default
+WARMUP_SECONDS = 3               # camera stabilization
 # ============================================
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 def open_camera():
     cap = cv2.VideoCapture(VIDEO_DEVICE, cv2.CAP_V4L2)
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-    cap.set(cv2.CAP_PROP_FPS, FPS)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'YUYV'))
+
+    # Let driver decide FPS (more reliable for thermal cams)
     return cap
 
 def create_writer():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"thermal_{timestamp}.avi"
+
+    if USE_MP4:
+        filename = f"thermal_{timestamp}.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    else:
+        filename = f"thermal_{timestamp}.avi"
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+
     path = os.path.join(SAVE_DIR, filename)
 
-    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    writer = cv2.VideoWriter(path, fourcc, FPS, (FRAME_WIDTH, FRAME_HEIGHT))
+    writer = cv2.VideoWriter(
+        path,
+        fourcc,
+        TARGET_FPS,
+        (FRAME_WIDTH, FRAME_HEIGHT)
+    )
+
     return writer, path
 
 cap = open_camera()
 assert cap.isOpened(), "❌ Failed to open camera"
+
+# -------- Camera Warm-up --------
+print("⏳ Warming up camera...")
+t0 = time.time()
+while time.time() - t0 < WARMUP_SECONDS:
+    cap.read()
+
+print("✅ Camera ready")
 
 try:
     while True:
         writer, filepath = create_writer()
         print(f"▶ Recording: {filepath}")
 
-        start_time = time.time()
-        duration = CLIP_DURATION_MINUTES * 60
+        total_frames = TARGET_FPS * CLIP_DURATION_MINUTES * 60
+        written = 0
+        t_start = time.time()
 
-        while time.time() - start_time < duration:
+        while written < total_frames:
             ret, frame = cap.read()
             if not ret:
                 print("⚠ Frame drop")
-                break
+                continue
 
             writer.write(frame)
+            written += 1
 
+        elapsed = time.time() - t_start
         writer.release()
-        print("✔ Clip saved")
+
+        print(f"✔ Saved {written} frames")
+        print(f"⏱ Real time: {elapsed:.1f}s")
+        print(f"🎞 Video duration: {written / TARGET_FPS:.1f}s\n")
 
 except KeyboardInterrupt:
     print("\n🛑 Stopped by user")
