@@ -1,0 +1,2 @@
+ffplay -f v4l2 -pixel_format yuyv422 -video_size 256x194 /dev/video2
+
